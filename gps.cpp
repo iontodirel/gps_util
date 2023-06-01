@@ -5,6 +5,9 @@
 #include <unistd.h>
 #include <cmath>
 
+#include <ctime>
+#include <chrono>
+
 using namespace std;
 
 struct gpsd_client::gpsd_client_impl
@@ -35,7 +38,7 @@ void gpsd_client::close()
     gps_close(&impl.get()->gps_data);
 }
 
-bool gpsd_client::try_get_gps_position(double& lat, double& lon)
+bool gpsd_client::try_get_gps_position_and_time(double& lat, double& lon, struct date_time& t)
 {
     const char* mode_str[] =
     {
@@ -64,14 +67,30 @@ bool gpsd_client::try_get_gps_position(double& lat, double& lon)
             impl.get()->gps_data.fix.mode = 0;
         }
 
+        if (TIME_SET == (TIME_SET & impl.get()->gps_data.set))
+        {
+            std::chrono::system_clock::time_point tp
+            {
+                std::chrono::seconds(impl.get()->gps_data.fix.time.tv_sec) + std::chrono::nanoseconds(impl.get()->gps_data.fix.time.tv_nsec)
+            };
+
+            std::time_t time_t = std::chrono::system_clock::to_time_t(tp);
+
+            std::tm* timeinfo = std::gmtime(&time_t);
+
+            t.year = timeinfo->tm_year + 1900;
+            t.month = timeinfo->tm_mon + 1;
+            t.day = timeinfo->tm_mday;     
+            t.hour = timeinfo->tm_hour;    
+            t.minute = timeinfo->tm_min;   
+            t.second = timeinfo->tm_sec;   
+        }
+
         if (isfinite(impl.get()->gps_data.fix.latitude) && isfinite(impl.get()->gps_data.fix.longitude))
         {
             lat = impl.get()->gps_data.fix.latitude;
             lon = impl.get()->gps_data.fix.longitude;
             break;
-        }
-        else
-        {
         }
     }
 

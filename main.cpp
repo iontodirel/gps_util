@@ -47,12 +47,13 @@ position_print_format parse_position_format(const std::string& pos_str)
     return position_print_format::dd;
 }
 
-bool try_get_gps_position(const args& args, position_dd& pos);
+bool try_get_gps_position_and_time(const args& args, position_dd& pos, struct date_time& t);
 bool try_parse_command_line(int argc, char* argv[], args& args);
 void print_usage();
 std::string coordinate_to_aprx_format(int d_d, double d_m, char d);
 void print_position(position_format format, position_dd& dd);
-std::string to_json(position_dd& dd);
+std::string to_json(position_dd& dd, date_time& t);
+int write_position(const std::string& filename, position_dd& dd, date_time& t);
 
 bool try_parse_command_line(int argc, char* argv[], args& args)
 {
@@ -186,9 +187,9 @@ void print_position(position_print_format print_fmt, position_dd& dd)
     printf("%s, %s\n", pos_display.lat.c_str(), pos_display.lon.c_str());
 }
 
-int write_position(const std::string& filename, position_dd& dd)
+int write_position(const std::string& filename, position_dd& dd, date_time& t)
 {
-    std::string json = to_json(dd);
+    std::string json = to_json(dd, t);
 
     std::ofstream outputFile(filename);
     if (!outputFile)
@@ -202,7 +203,7 @@ int write_position(const std::string& filename, position_dd& dd)
     return 0;
 }
 
-std::string to_json(position_dd& dd)
+std::string to_json(position_dd& dd, date_time& t)
 {
     std::string str;
     str += "{\n";
@@ -241,6 +242,15 @@ std::string to_json(position_dd& dd)
     str += "    \"position_ddm_short\": {\n";
     str += "        \"lat\": \"" + coordinate_to_aprx_format(ddm.lat_d, ddm.lat_m, ddm.lat) + "\",\n";
     str += "        \"lon\": \"" + coordinate_to_aprx_format(ddm.lon_d, ddm.lon_m, ddm.lon) + "\"\n";
+    str += "    },\n";
+
+    str += "    \"utc_time\": {\n";
+    str += "        \"year\": \"" + std::to_string(t.year) + "\",\n";
+    str += "        \"month\": \"" + ((t.month < 10) ? ("0" + std::to_string(t.month)) : std::to_string(t.month)) + "\",\n";
+    str += "        \"day\": \"" + ((t.day < 10) ? ("0" + std::to_string(t.day)) : std::to_string(t.day)) + "\",\n";
+    str += "        \"hour\": \"" + ((t.hour < 10) ? ("0" + std::to_string(t.hour)) : std::to_string(t.hour)) + "\",\n";
+    str += "        \"min\": \"" + ((t.minute < 10) ? ("0" + std::to_string(t.minute)) : std::to_string(t.minute)) + "\",\n";
+    str += "        \"sec\": \"" + ((t.second < 10) ? ("0" + std::to_string(t.second)) : std::to_string(t.second)) + "\"\n";
     str += "    }\n";
 
     str += "}";
@@ -267,8 +277,9 @@ int main(int argc, char* argv[])
     }
 
     position_dd pos;
+    date_time t;
 
-    if (try_get_gps_position(args, pos))
+    if (try_get_gps_position_and_time(args, pos, t))
     {
         if (!args.no_stdout)
         {
@@ -276,7 +287,7 @@ int main(int argc, char* argv[])
         }
         if (!args.output_file.empty())
         {
-            return write_position(args.output_file, pos);
+            return write_position(args.output_file, pos, t);
         }
         return 0;
     }
@@ -284,12 +295,12 @@ int main(int argc, char* argv[])
     return 1;
 }
 
-bool try_get_gps_position(const args& args, position_dd& pos)
+bool try_get_gps_position_and_time(const args& args, position_dd& pos, date_time& t)
 {
     gpsd_client s;
     if (s.open(args.host_name, args.port))
     {
-        s.try_get_gps_position(pos.lat, pos.lon);
+        s.try_get_gps_position_and_time(pos.lat, pos.lon, t);
         s.close();
         return true;
     }
