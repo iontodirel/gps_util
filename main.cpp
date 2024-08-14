@@ -60,6 +60,7 @@ bool try_parse_command_line(int argc, char* argv[], args& args);
 void print_usage();
 std::string to_lower(const std::string& s);
 bool try_parse_bool(const std::string& s, bool& b);
+bool try_parse_double(std::string str, double& number);
 
 position_print_format parse_position_format(const std::string& pos_str);
 
@@ -137,15 +138,31 @@ bool try_parse_command_line(int argc, char* argv[], args& args)
     if (result.count("use-gps") > 0)
     {
         bool use_gps = false;
-        try_parse_bool(result["use-gps"].as<std::string>(), use_gps);
+        if (!try_parse_bool(result["use-gps"].as<std::string>(), use_gps))
+        {
+            args.command_line_has_errors = true;
+            return false;
+        }
         args.no_gps = !use_gps;
     }
     if (result.count("no-gps") > 0)
         args.no_gps = true;
     if (result.count("lat") > 0)
-        args.lat = atof(result["lat"].as<std::string>().c_str());
+    {
+        if(!try_parse_double(result["lat"].as<std::string>(), args.lat))
+        {
+            args.command_line_has_errors = true;
+            return false;
+        }
+    }
     if (result.count("lon") > 0)
-        args.lon = atof(result["lon"].as<std::string>().c_str());
+    {
+        if (!try_parse_double(result["lon"].as<std::string>(), args.lon))
+        {
+            args.command_line_has_errors = true;
+            return false;
+        }
+    }
     if (result.count("aprs-comment") > 0)
         args.aprs_comment = result["aprs-comment"].as<std::string>();
     if (result.count("aprs-symbol") > 0)
@@ -220,6 +237,19 @@ bool try_parse_bool(const std::string& s, bool& b)
     }
 
     return false;
+}
+
+bool try_parse_double(std::string str, double& number)
+{
+    if (str.empty())
+        return false;
+    double maybe_number = -1;
+    std::istringstream iss(str);
+    iss >> std::noskipws >> maybe_number;
+    bool result = !iss.fail() && iss.eof();
+    if (result)
+        number = maybe_number;
+    return result;
 }
 
 position_print_format parse_position_format(const std::string& pos_str)
