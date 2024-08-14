@@ -8,6 +8,7 @@
 #include <iomanip>
 #include <sstream>
 #include <string>
+#include <algorithm>
 
 #define POSITION_LIB_NAMESPACE_BEGIN
 #define POSITION_LIB_NAMESPACE_END
@@ -57,6 +58,8 @@ struct args
 
 bool try_parse_command_line(int argc, char* argv[], args& args);
 void print_usage();
+std::string to_lower(const std::string& s);
+bool try_parse_bool(const std::string& s, bool& b);
 
 position_print_format parse_position_format(const std::string& pos_str);
 
@@ -132,7 +135,11 @@ bool try_parse_command_line(int argc, char* argv[], args& args)
     if (result.count("no-stdout") > 0)
         args.no_stdout = true;
     if (result.count("use-gps") > 0)
-        args.no_gps = (result["use-gps"].as<std::string>()) != "true";
+    {
+        bool use_gps = false;
+        try_parse_bool(result["use-gps"].as<std::string>(), use_gps);
+        args.no_gps = !use_gps;
+    }
     if (result.count("no-gps") > 0)
         args.no_gps = true;
     if (result.count("lat") > 0)
@@ -188,6 +195,31 @@ void print_usage()
         "\n"
         "\n";
     printf("%s", usage.c_str());
+}
+
+std::string to_lower(const std::string& s)
+{
+    std::string lower_s = s;
+    std::transform(lower_s.begin(), lower_s.end(), lower_s.begin(), ::tolower);
+    return lower_s;
+}
+
+bool try_parse_bool(const std::string& s, bool& b)
+{
+    std::string lower_s = to_lower(s);
+
+    if (lower_s == "true")
+    {
+        b = true;
+        return true;
+    }
+    else if (lower_s == "false")
+    {
+        b = false;
+        return true;
+    }
+
+    return false;
 }
 
 position_print_format parse_position_format(const std::string& pos_str)
