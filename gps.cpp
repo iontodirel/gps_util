@@ -239,21 +239,21 @@ std::string to_json(const gnss_info& info)
     date_time t_utc = info.time_utc;
     str += "    \"utc_time\": {\n";
     str += "        \"year\": \"" + std::to_string(t_utc.year) + "\",\n";
-    str += "        \"month\": \"" + ((t_utc.month < 10) ? ("0" + std::to_string(t_utc.month)) : std::to_string(t_utc.month)) + "\",\n";
-    str += "        \"day\": \"" + ((t_utc.day < 10) ? ("0" + std::to_string(t_utc.day)) : std::to_string(t_utc.day)) + "\",\n";
-    str += "        \"hour\": \"" + ((t_utc.hour < 10) ? ("0" + std::to_string(t_utc.hour)) : std::to_string(t_utc.hour)) + "\",\n";
-    str += "        \"min\": \"" + ((t_utc.minute < 10) ? ("0" + std::to_string(t_utc.minute)) : std::to_string(t_utc.minute)) + "\",\n";
-    str += "        \"sec\": \"" + ((t_utc.second < 10) ? ("0" + std::to_string(t_utc.second)) : std::to_string(t_utc.second)) + "\"\n";
+    str += "        \"month\": \"" + ((t_utc.month < 10 && t_utc.month > 0) ? ("0" + std::to_string(t_utc.month)) : std::to_string(t_utc.month)) + "\",\n";
+    str += "        \"day\": \"" + ((t_utc.day < 10 && t_utc.day > 0) ? ("0" + std::to_string(t_utc.day)) : std::to_string(t_utc.day)) + "\",\n";
+    str += "        \"hour\": \"" + ((t_utc.hour < 10 && t_utc.hour > 0) ? ("0" + std::to_string(t_utc.hour)) : std::to_string(t_utc.hour)) + "\",\n";
+    str += "        \"min\": \"" + ((t_utc.minute < 10 && t_utc.minute > 0) ? ("0" + std::to_string(t_utc.minute)) : std::to_string(t_utc.minute)) + "\",\n";
+    str += "        \"sec\": \"" + ((t_utc.second < 10 && t_utc.second > 0) ? ("0" + std::to_string(t_utc.second)) : std::to_string(t_utc.second)) + "\"\n";
     str += "    },\n";
 
     date_time t = info.time;
     str += "    \"time\": {\n";
     str += "        \"year\": \"" + std::to_string(t.year) + "\",\n";
-    str += "        \"month\": \"" + ((t.month < 10) ? ("0" + std::to_string(t.month)) : std::to_string(t.month)) + "\",\n";
-    str += "        \"day\": \"" + ((t.day < 10) ? ("0" + std::to_string(t.day)) : std::to_string(t.day)) + "\",\n";
-    str += "        \"hour\": \"" + ((t.hour < 10) ? ("0" + std::to_string(t.hour)) : std::to_string(t.hour)) + "\",\n";
-    str += "        \"min\": \"" + ((t.minute < 10) ? ("0" + std::to_string(t.minute)) : std::to_string(t.minute)) + "\",\n";
-    str += "        \"sec\": \"" + ((t.second < 10) ? ("0" + std::to_string(t.second)) : std::to_string(t.second)) + "\"\n";
+    str += "        \"month\": \"" + ((t.month < 10 && t.month > 0) ? ("0" + std::to_string(t.month)) : std::to_string(t.month)) + "\",\n";
+    str += "        \"day\": \"" + ((t.day < 10 && t.day > 0) ? ("0" + std::to_string(t.day)) : std::to_string(t.day)) + "\",\n";
+    str += "        \"hour\": \"" + ((t.hour < 10 && t.hour > 0) ? ("0" + std::to_string(t.hour)) : std::to_string(t.hour)) + "\",\n";
+    str += "        \"min\": \"" + ((t.minute < 10 && t.minute > 0) ? ("0" + std::to_string(t.minute)) : std::to_string(t.minute)) + "\",\n";
+    str += "        \"sec\": \"" + ((t.second < 10 && t.second > 0) ? ("0" + std::to_string(t.second)) : std::to_string(t.second)) + "\"\n";
     str += "    }\n";
     
     str += "}";

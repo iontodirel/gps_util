@@ -378,14 +378,23 @@ bool try_get_gps_info(const args& args, gnss_info& info)
 {
     gpsd_client s;
     bool result = false;
-    if (s.open(args.host_name, args.port))
+    if (!args.no_gps)
     {
-        do
+        if (s.open(args.host_name, args.port))
         {
-            result = s.try_get_gps_info(info, gnss_include_info::all);
+            do
+            {
+                result = s.try_get_gps_info(info, gnss_include_info::all);
+            }
+            while (false);
+            s.close();
         }
-        while (false);
-        s.close();
+    }
+    else
+    {
+        info.lat = args.lat;
+        info.lon = args.lon;
+        result = true;
     }
     return result;
 }
