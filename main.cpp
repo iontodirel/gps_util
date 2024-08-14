@@ -5,12 +5,26 @@
 
 #include <iostream>
 #include <fstream>
+#include <iomanip>
+#include <sstream>
+#include <string>
 
 #define POSITION_LIB_NAMESPACE_BEGIN
 #define POSITION_LIB_NAMESPACE_END
+#define POSITION_LIB_DETAIL_NAMESPACE_BEGIN
+#define POSITION_LIB_DETAIL_NAMESPACE_REFERENCE
+#define POSITION_LIB_DETAIL_NAMESPACE_END
 #include "external/position.hpp"
 
 using namespace std;
+
+// **************************************************************** //
+//                                                                  //
+//                                                                  //
+// DECLARATIONS                                                     //
+//                                                                  //
+//                                                                  //
+// **************************************************************** //
 
 struct args;
 
@@ -19,7 +33,8 @@ enum class position_print_format
     dd,
     dms,
     ddm,
-    ddm_short
+    ddm_short,
+    aprs
 };
 
 struct args
@@ -32,28 +47,44 @@ struct args
     bool command_line_has_errors = false;
     bool help = false;
     bool no_stdout = false;
+    bool no_gps = false;
+    double lat = -1;
+    double lon = -1;
+    std::string aprs_comment;
+    std::string aprs_symbol;
+    std::string aprs_symbol_table;
 };
 
-position_print_format parse_position_format(const std::string& pos_str)
-{
-    if (pos_str == "dd")
-        return position_print_format::dd;
-    else if (pos_str == "dms")
-        return position_print_format::dms;
-    else if (pos_str == "ddm")
-        return position_print_format::ddm;
-    else if (pos_str == "ddm_short" || pos_str == "aprx")
-        return position_print_format::ddm_short;
-    return position_print_format::dd;
-}
-
-bool try_get_gps_position_and_time(const args& args, position_dd& pos, struct date_time& t);
 bool try_parse_command_line(int argc, char* argv[], args& args);
 void print_usage();
-std::string coordinate_to_aprx_format(int d_d, double d_m, char d);
-void print_position(position_format format, position_dd& dd);
-std::string to_json(position_dd& dd, date_time& t);
-int write_position(const std::string& filename, position_dd& dd, date_time& t);
+
+position_print_format parse_position_format(const std::string& pos_str);
+
+void print_position(position_format format, const gnss_info& gnss_info);
+int write_position(const std::string& filename, const gnss_info& info);
+std::string encode_aprs_position_packet_no_time(const std::string& symbol, const std::string& symbol_table, const std::string& comment, double lat, double lon);
+std::string encode_aprs_position_packet_no_time(const args& args, double lat, double lon);
+std::string encode_aprs_position_packet_no_time(const args& args);
+std::string encode_aprs_position_packet(const std::string& symbol, const std::string& symbol_table, const std::string& comment, const gnss_info& gnss_info);
+std::string encode_aprs_position_packet(const args& args, const gnss_info& gnss_info);
+void print_aprs_position_packet(const args& args, const gnss_info& gnss_info);
+std::string format_two_digits_string(int number);
+
+bool try_get_gps_info(const args& args, gnss_info& info);
+
+int main(int argc, char* argv[]);
+
+// **************************************************************** //
+//                                                                  //
+//                                                                  //
+//                                                                  //
+//                                                                  //
+// IMPLEMENTATION                                                   //
+//                                                                  //
+//                                                                  //
+//                                                                  //
+//                                                                  //
+// **************************************************************** //
 
 bool try_parse_command_line(int argc, char* argv[], args& args)
 {
@@ -65,6 +96,13 @@ bool try_parse_command_line(int argc, char* argv[], args& args)
         ("f,format", "", cxxopts::value<std::string>()->default_value("dd"))
         ("p,port", "", cxxopts::value<int>())
         ("h,host-name", "", cxxopts::value<std::string>())
+        ("aprs-comment", "", cxxopts::value<std::string>())
+        ("aprs-symbol", "", cxxopts::value<std::string>())
+        ("aprs-symbol-table-id", "", cxxopts::value<std::string>())        
+        ("lat", "", cxxopts::value<std::string>())
+        ("lon", "", cxxopts::value<std::string>())
+        ("use-gps", "", cxxopts::value<std::string>())
+        ("no-gps", "")
         ("help", "")
         ("no-stdout", "");
 
@@ -74,15 +112,9 @@ bool try_parse_command_line(int argc, char* argv[], args& args)
     {
         result = options.parse(argc, argv);
     }
-    catch (const cxxopts::exceptions::incorrect_argument_type& e)
-    {
-        args.command_line_error = fmt::format("Error parsing command line: {}\n\n", e.what());
-        args.command_line_has_errors = true;
-        return false;
-    }
     catch (const std::exception& e)
     {
-        args.command_line_error = "Error parsing command line.";
+        args.command_line_error = fmt::format("Error parsing command line: {}\n\n", e.what());
         args.command_line_has_errors = true;
         return false;
     }
@@ -99,6 +131,20 @@ bool try_parse_command_line(int argc, char* argv[], args& args)
         args.help = true;
     if (result.count("no-stdout") > 0)
         args.no_stdout = true;
+    if (result.count("use-gps") > 0)
+        args.no_gps = (result["use-gps"].as<std::string>()) != "true";
+    if (result.count("no-gps") > 0)
+        args.no_gps = true;
+    if (result.count("lat") > 0)
+        args.lat = atof(result["lat"].as<std::string>().c_str());
+    if (result.count("lon") > 0)
+        args.lon = atof(result["lon"].as<std::string>().c_str());
+    if (result.count("aprs-comment") > 0)
+        args.aprs_comment = result["aprs-comment"].as<std::string>();
+    if (result.count("aprs-symbol") > 0)
+        args.aprs_symbol = result["aprs-symbol"].as<std::string>();
+    if (result.count("aprs-symbol-table-id") > 0)
+        args.aprs_symbol_table = result["aprs-symbol-table-id"].as<std::string>();
 
     return true;
 }
@@ -113,54 +159,55 @@ void print_usage()
         "    gps_util [OPTION]... \n"
         "\n"
         "Options:\n"     
-        "    -h, --host-name <host>  specify the hostname where gpsd runs on\n"
-        "    -p, --port <port>       specify the port to connect to gpsd, typically 2947\n"
-        "    -f, --format <format>   coordinates print format:\n"
-        "                                dd\n"
-        "                                ddm\n"
-        "                                dms\n"
-        "                                ddm_short\n"
-        "    -o, --output <file>     file name to write JSON GPS data to\n"
-        "    --help                  print usage\n"
-        "    --no-stdout             no stdout\n"
+        "    -h, --host-name <host>       specify the hostname where gpsd runs on\n"
+        "    -p, --port <port>            specify the port to connect to gpsd, typically 2947\n"
+        "    -f, --format <format>        coordinates print format:\n"
+        "                                     dd\n"
+        "                                     ddm\n"
+        "                                     dms\n"
+        "                                     ddm_short\n"
+        "                                     aprx\n"
+        "                                     aprs\n"
+        "    --aprs-comment <comment>     APRS comment\n"
+        "    --aprs-symbol <symbol>       APRS symbol\n"
+        "    --aprs-symbol-table-id <id>  APRS symbol table\n"
+        "    -o, --output <file>          file name to write JSON GPS data to\n" 
+        "    --no-gps                     use fixed input lat,lon as information\n"
+        "    --lat <lat>                  fixed latitude in DD format\n"
+        "    --lon <lon>                  fixed longitude in DD format\n"
+        "    --help                       print usage\n"
+        "    --no-stdout                  no stdout\n"
         "\n"
         "Returns:\n"
         "    0 - success\n"
         "    1 - failure\n"
         "\n"
         "Example:\n"
-        "    gps_util -h localhost -p 8888 -f dms -o file.json -h\n"
+        "    gps_util -h localhost -p 8888 -f dms -o file.json\n"
+        "    gps_util -h localhost -p 8888 -f aprs --aprs-comment \"Downtown Bellevue fill-in Digipeater\" --aprs-symbol \"#\" --aprs-symbol-table-id \"I\"\n"
         "\n"
         "\n";
     printf("%s", usage.c_str());
 }
 
-std::string coordinate_to_aprx_format(int d_d, double d_m, char d)
+position_print_format parse_position_format(const std::string& pos_str)
 {
-    std::string res;
-
-    double d_m_i, d_m_f;    
-    d_m_f = std::modf(d_m, &d_m_i);
-
-    res.append(std::to_string(d_d));
-    res.append(std::to_string((int)d_m_i));
-    res.append(".");
-
-    double d_m_f_100 = (format_number(d_m_f, 2) * 100);
-
-    if (d_m_f_100 < 10)
-    {
-        res.append("0");
-    }
-
-    res.append(std::to_string((int)d_m_f_100));
-    res.append(std::string(1, d));
-
-    return res;
+    if (pos_str == "dd")
+        return position_print_format::dd;
+    else if (pos_str == "dms")
+        return position_print_format::dms;
+    else if (pos_str == "ddm")
+        return position_print_format::ddm;
+    else if (pos_str == "ddm_short" || pos_str == "aprx")
+        return position_print_format::ddm_short;
+    else if (pos_str == "aprs")
+        return position_print_format::aprs;
+    return position_print_format::dd;
 }
 
-void print_position(position_print_format print_fmt, position_dd& dd)
+void print_position(position_print_format print_fmt, const gnss_info& gnss_info)
 {
+    position_dd dd = { gnss_info.lat, gnss_info.lon };
     position_display_string pos_display;
 
     if (print_fmt == position_print_format::dd)
@@ -177,84 +224,138 @@ void print_position(position_print_format print_fmt, position_dd& dd)
     }
     else if (print_fmt == position_print_format::ddm_short)
     {
-        position_ddm ddm = dd;
-        std::string lat = coordinate_to_aprx_format(ddm.lat_d, ddm.lat_m, ddm.lat);
-        std::string lon = coordinate_to_aprx_format(ddm.lon_d, ddm.lon_m, ddm.lon);
-        printf("%s, %s\n", lat.c_str(), lon.c_str());
-        return;
-    }  
+        pos_display = format(position_ddm(dd), position_ddm_short_format);
+    }
 
     printf("%s, %s\n", pos_display.lat.c_str(), pos_display.lon.c_str());
 }
 
-int write_position(const std::string& filename, position_dd& dd, date_time& t)
+int write_position(const std::string& filename, const gnss_info& info)
 {
-    std::string json = to_json(dd, t);
+    std::string json = to_json(info);
 
-    std::ofstream outputFile(filename);
-    if (!outputFile)
+    std::ofstream output_file(filename);
+    if (!output_file)
     {
         return 1;
     }
 
-    outputFile << json;
-    outputFile.close();
+    output_file << json;
+    output_file.close();
 
     return 0;
 }
 
-std::string to_json(position_dd& dd, date_time& t)
+std::string encode_aprs_position_packet_no_time(const std::string& symbol, const std::string& symbol_table, const std::string& comment, double lat, double lon) 
 {
-    std::string str;
-    str += "{\n";
-    
-    // DD    
-    str += "    \"position_dd\": {\n";
-    str += "        \"lat\": \"" + std::to_string(dd.lat) + "\",\n";
-    str += "        \"lon\": \"" + std::to_string(dd.lon) + "\"\n";
-    str += "    },\n";
+    // 
+    //  Data Format:
+    // 
+    //     !   Lat  Sym  Lon  Sym Code   Comment
+    //     =
+    //    ------------------------------------------
+    //     1    8    1    9      1        0-43
+    //
+    //  Examples:
+    //
+    //    !4903.50N/07201.75W-Test 001234
+    //    !4903.50N/07201.75W-Test /A=001234
+    //    !49  .  N/072  .  W-
+    //
 
-    // DDM
-    position_ddm ddm = dd;
-    str += "    \"position_ddm\": {\n";
-    str += "        \"lat\": \"" + std::string(1, ddm.lat) + "\",\n";
-    str += "        \"lat_d\": \"" + std::to_string(ddm.lat_d) + "\",\n";
-    str += "        \"lat_m\": \"" + std::to_string(ddm.lat_m) + "\",\n";
-    str += "        \"lon\": \"" + std::string(1, ddm.lon) + "\",\n";
-    str += "        \"lon_d\": \"" + std::to_string(ddm.lon_d) + "\",\n";
-    str += "        \"lon_m\": \"" + std::to_string(ddm.lon_m) + "\"\n";
-    str += "    },\n";
+    position_dd dd { lat, lon };
+    position_display_string ddm_short_display = format(position_ddm(dd), position_ddm_short_format);
 
-    // DMS
-    position_dms dms = dd;
-    str += "    \"position_dms\": {\n";
-    str += "        \"lat\": \"" + std::string(1, dms.lat) + "\",\n";
-    str += "        \"lat_d\": \"" + std::to_string(dms.lat_d) + "\",\n";
-    str += "        \"lat_m\": \"" + std::to_string(dms.lat_m) + "\",\n";
-    str += "        \"lat_s\": \"" + std::to_string(dms.lat_s) + "\",\n";
-    str += "        \"lon\": \"" + std::string(1, dms.lon) + "\",\n";
-    str += "        \"lon_d\": \"" + std::to_string(dms.lon_d) + "\",\n";
-    str += "        \"lon_m\": \"" + std::to_string(dms.lon_m) + "\",\n";
-    str += "        \"lon_s\": \"" + std::to_string(dms.lon_s) + "\"\n";    
-    str += "    },\n";
+    std::string message;
 
-    // DDM in ddmm.mmN/dddmm.mmE notation used by APRX
-    str += "    \"position_ddm_short\": {\n";
-    str += "        \"lat\": \"" + coordinate_to_aprx_format(ddm.lat_d, ddm.lat_m, ddm.lat) + "\",\n";
-    str += "        \"lon\": \"" + coordinate_to_aprx_format(ddm.lon_d, ddm.lon_m, ddm.lon) + "\"\n";
-    str += "    },\n";
+    message.append("!");
+    message.append(ddm_short_display.lat);
+    message.append(symbol_table);
+    message.append(ddm_short_display.lon);
+    message.append(symbol);
+    message.append(comment);
 
-    str += "    \"utc_time\": {\n";
-    str += "        \"year\": \"" + std::to_string(t.year) + "\",\n";
-    str += "        \"month\": \"" + ((t.month < 10) ? ("0" + std::to_string(t.month)) : std::to_string(t.month)) + "\",\n";
-    str += "        \"day\": \"" + ((t.day < 10) ? ("0" + std::to_string(t.day)) : std::to_string(t.day)) + "\",\n";
-    str += "        \"hour\": \"" + ((t.hour < 10) ? ("0" + std::to_string(t.hour)) : std::to_string(t.hour)) + "\",\n";
-    str += "        \"min\": \"" + ((t.minute < 10) ? ("0" + std::to_string(t.minute)) : std::to_string(t.minute)) + "\",\n";
-    str += "        \"sec\": \"" + ((t.second < 10) ? ("0" + std::to_string(t.second)) : std::to_string(t.second)) + "\"\n";
-    str += "    }\n";
+    return message;
+}
 
-    str += "}";
-    return str;
+std::string encode_aprs_position_packet_no_time(const args& args, double lat, double lon) 
+{
+    return encode_aprs_position_packet_no_time(args.aprs_symbol, args.aprs_symbol_table, args.aprs_comment, lat, lon);
+}
+
+std::string encode_aprs_position_packet_no_time(const args& args) 
+{
+    return encode_aprs_position_packet_no_time(args.aprs_symbol, args.aprs_symbol_table, args.aprs_comment, args.lat, args.lon);
+}
+
+std::string encode_aprs_position_packet(const std::string& symbol, const std::string& symbol_table, const std::string& comment, const gnss_info& gnss_info) 
+{
+    // 
+    //  Data Format:
+    // 
+    //     /   Time  Lat   Sym  Lon  Sym Code   Comment
+    //     @
+    //    -----------------------------------------------
+    //     1    7     8     1    9      1        0-43
+    //
+    //  Examples:
+    //
+    //    /092345z4903.50N/07201.75W>Test1234
+    //    @092345/4903.50N/07201.75W>Test1234
+    //
+
+    position_dd dd { gnss_info.lat, gnss_info.lon };
+    position_display_string ddm_short_display = format(position_ddm(dd), position_ddm_short_format);
+
+    std::string message;
+
+    message.append("/");
+    message.append(format_two_digits_string(gnss_info.time_utc.day));
+    message.append(format_two_digits_string(gnss_info.time_utc.hour));
+    message.append(format_two_digits_string(gnss_info.time_utc.minute));
+    message.append("z");
+    message.append(ddm_short_display.lat);
+    message.append(symbol_table);
+    message.append(ddm_short_display.lon);
+    message.append(symbol);
+    message.append(comment);
+
+    return message;
+}
+
+std::string encode_aprs_position_packet(const args& args, const gnss_info& gnss_info)
+{
+    return encode_aprs_position_packet(args.aprs_symbol, args.aprs_symbol_table, args.aprs_comment, gnss_info);
+}
+
+void print_aprs_position_packet(const args& args, const gnss_info& gnss_info)
+{
+    std::string packet = args.no_gps ? encode_aprs_position_packet_no_time(args) :
+        encode_aprs_position_packet(args, gnss_info);
+    printf("%s\n", packet.c_str());
+}
+
+std::string format_two_digits_string(int number)
+{
+    std::ostringstream oss;
+    oss << std::setw(2) << std::setfill('0') << number;
+    return oss.str();
+}
+
+bool try_get_gps_info(const args& args, gnss_info& info)
+{
+    gpsd_client s;
+    bool result = false;
+    if (s.open(args.host_name, args.port))
+    {
+        do
+        {
+            result = s.try_get_gps_info(info, gnss_include_info::all);
+        }
+        while (false);
+        s.close();
+    }
+    return result;
 }
 
 int main(int argc, char* argv[])
@@ -269,40 +370,38 @@ int main(int argc, char* argv[])
         return 1;
     }    
 
-    if (args.command_line_has_errors && !args.no_stdout)
-    {
-        printf("%s\n\n", args.command_line_error.c_str());
-        print_usage();
-        return 1;
-    }
-
-    position_dd pos;
-    date_time t;
-
-    if (try_get_gps_position_and_time(args, pos, t))
+    if (args.command_line_has_errors)
     {
         if (!args.no_stdout)
         {
-            print_position(args.format, pos);
+            printf("%s\n\n", args.command_line_error.c_str());
+            print_usage();
+        }
+        return 1;
+    }
+
+    gnss_info info;
+
+    if (try_get_gps_info(args, info))
+    {
+        if (!args.no_stdout)
+        {
+            if (args.format == position_print_format::aprs)
+            {
+                print_aprs_position_packet(args, info);
+            }
+            else
+            {
+                print_position(args.format, info);
+            }
         }
         if (!args.output_file.empty())
         {
-            return write_position(args.output_file, pos, t);
+            return write_position(args.output_file, info);
         }
+
         return 0;
     }
 
     return 1;
-}
-
-bool try_get_gps_position_and_time(const args& args, position_dd& pos, date_time& t)
-{
-    gpsd_client s;
-    if (s.open(args.host_name, args.port))
-    {
-        s.try_get_gps_position_and_time(pos.lat, pos.lon, t);
-        s.close();
-        return true;
-    }
-    return false;
 }
