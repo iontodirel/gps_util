@@ -1,2 +1,2 @@
 # gps_util
-A gpsd client
+A C++ gpsd client
