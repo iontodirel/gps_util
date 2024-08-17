@@ -29,13 +29,15 @@ using namespace std;
 
 struct args;
 
-enum class position_print_format
+enum class position_print_format : int
 {
     dd,
     dms,
     ddm,
     ddm_short,
-    aprs
+    aprs,
+    aprs_with_timestamp = aprs,
+    aprs_without_timestamp
 };
 
 struct args
@@ -66,9 +68,9 @@ position_print_format parse_position_format(const std::string& pos_str);
 
 void print_position(position_format format, const gnss_info& gnss_info);
 int write_position(const std::string& filename, const gnss_info& info);
-std::string encode_aprs_position_packet_no_time(const std::string& symbol, const std::string& symbol_table, const std::string& comment, double lat, double lon);
-std::string encode_aprs_position_packet_no_time(const args& args, double lat, double lon);
-std::string encode_aprs_position_packet_no_time(const args& args);
+std::string encode_aprs_position_packet_no_timestamp(const std::string& symbol, const std::string& symbol_table, const std::string& comment, double lat, double lon);
+std::string encode_aprs_position_packet_no_timestamp(const args& args, double lat, double lon);
+std::string encode_aprs_position_packet_no_timestamp(const args& args);
 std::string encode_aprs_position_packet(const std::string& symbol, const std::string& symbol_table, const std::string& comment, const gnss_info& gnss_info);
 std::string encode_aprs_position_packet(const args& args, const gnss_info& gnss_info);
 void print_aprs_position_packet(const args& args, const gnss_info& gnss_info);
@@ -262,8 +264,10 @@ position_print_format parse_position_format(const std::string& pos_str)
         return position_print_format::ddm;
     else if (pos_str == "ddm_short" || pos_str == "aprx")
         return position_print_format::ddm_short;
-    else if (pos_str == "aprs")
-        return position_print_format::aprs;
+    else if (pos_str == "aprs" || pos_str == "aprs_with_timestamp")
+        return position_print_format::aprs_with_timestamp;
+    else if (pos_str == "aprs_without_timestamp")
+        return position_print_format::aprs_without_timestamp;
     return position_print_format::dd;
 }
 
@@ -308,7 +312,7 @@ int write_position(const std::string& filename, const gnss_info& info)
     return 0;
 }
 
-std::string encode_aprs_position_packet_no_time(const std::string& symbol, const std::string& symbol_table, const std::string& comment, double lat, double lon) 
+std::string encode_aprs_position_packet_no_timestamp(const std::string& symbol, const std::string& symbol_table, const std::string& comment, double lat, double lon) 
 {
     // 
     //  Data Format:
@@ -340,14 +344,14 @@ std::string encode_aprs_position_packet_no_time(const std::string& symbol, const
     return message;
 }
 
-std::string encode_aprs_position_packet_no_time(const args& args, double lat, double lon) 
+std::string encode_aprs_position_packet_no_timestamp(const args& args, double lat, double lon) 
 {
-    return encode_aprs_position_packet_no_time(args.aprs_symbol, args.aprs_symbol_table, args.aprs_comment, lat, lon);
+    return encode_aprs_position_packet_no_timestamp(args.aprs_symbol, args.aprs_symbol_table, args.aprs_comment, lat, lon);
 }
 
-std::string encode_aprs_position_packet_no_time(const args& args) 
+std::string encode_aprs_position_packet_no_timestamp(const args& args) 
 {
-    return encode_aprs_position_packet_no_time(args.aprs_symbol, args.aprs_symbol_table, args.aprs_comment, args.lat, args.lon);
+    return encode_aprs_position_packet_no_timestamp(args.aprs_symbol, args.aprs_symbol_table, args.aprs_comment, args.lat, args.lon);
 }
 
 std::string encode_aprs_position_packet(const std::string& symbol, const std::string& symbol_table, const std::string& comment, const gnss_info& gnss_info) 
@@ -392,7 +396,8 @@ std::string encode_aprs_position_packet(const args& args, const gnss_info& gnss_
 
 void print_aprs_position_packet(const args& args, const gnss_info& gnss_info)
 {
-    std::string packet = args.no_gps ? encode_aprs_position_packet_no_time(args) :
+    std::string packet = (args.no_gps || args.format == position_print_format::aprs_without_timestamp) ?
+        encode_aprs_position_packet_no_timestamp(args) :
         encode_aprs_position_packet(args, gnss_info);
     printf("%s\n", packet.c_str());
 }
@@ -457,7 +462,8 @@ int main(int argc, char* argv[])
     {
         if (!args.no_stdout)
         {
-            if (args.format == position_print_format::aprs)
+            if (args.format == position_print_format::aprs_with_timestamp || 
+                args.format == position_print_format::aprs_without_timestamp)
             {
                 print_aprs_position_packet(args, info);
             }
